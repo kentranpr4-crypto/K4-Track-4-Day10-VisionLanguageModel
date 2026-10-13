@@ -197,6 +197,11 @@ def apply_setup(model, setup: str, rank=16, alpha=32, dropout=0.05):
         if p.requires_grad and "lora_" in name:
             p.data = p.data.float()
     if setup in ("e2", "e3"):
+        # Keep the complete vision path in FP32. Running the ViT itself in
+        # FP16 can overflow inside deepstack LayerNorm before the loss exists.
+        base = peft.get_base_model() if hasattr(peft, "get_base_model") else peft
+        if hasattr(base, "visual"):
+            base.visual.float()
         for name, p in peft.named_parameters():
             if "visual.merger" in name or "visual.deepstack_merger_list" in name:
                 p.data = p.data.float()

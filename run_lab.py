@@ -180,7 +180,7 @@ def apply_setup(model, setup: str, rank=16, alpha=32, dropout=0.05):
     targets = ["q_proj", "k_proj", "v_proj", "o_proj",
                "gate_proj", "up_proj", "down_proj"]
     if setup == "e3":
-        targets += ["qkv", "linear_fc1", "linear_fc2"]
+        targets += ["qkv", "proj", "linear_fc1", "linear_fc2"]
     peft = get_peft_model(model, LoraConfig(r=rank, lora_alpha=alpha,
                     lora_dropout=dropout, target_modules=targets,
                     task_type="CAUSAL_LM", bias="none"))

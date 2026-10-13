@@ -1,0 +1,13 @@
+# Install a CUDA-compatible torch/torchvision first when the VM image does not
+# already provide them. The exact CUDA wheel depends on the VM driver.
+torch>=2.6.0
+torchvision>=0.21.0
+transformers==5.19.0
+peft==0.21.2
+trl==1.9.2
+accelerate==1.15.0
+bitsandbytes==0.50.2
+pyyaml
+pillow
+kaggle
+jupyterlab

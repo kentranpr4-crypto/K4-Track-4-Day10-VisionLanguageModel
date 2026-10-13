@@ -87,3 +87,31 @@ Mọi setup dùng **QLoRA 4-bit** (NF4). Riêng ViT và `lm_head` **không lư�
 - **Không commit**: `data/`, `work/`, `.env`, trọng số (`*.safetensors`, `*.bin`, `*.pt`).
 - **Không sửa** `scripts/` và `tests/` của đề.
 - Làm cá nhân: bạn có thể thảo luận ý tưởng, nhưng mã, số liệu và báo cáo phải là của bạn. Giảng viên đối chiếu các repo với nhau và có thể gọi **vấn đáp 5 phút**.
+
+## 7. Chạy trên VM (khuyến nghị khi có GPU riêng)
+
+VM có GPU NVIDIA thường ổn định hơn Colab vì không bị ngắt phiên. Cần driver CUDA tương thích với PyTorch và ít nhất 16 GB VRAM cho cấu hình mặc định.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+# Nếu image VM chưa có torch, cài wheel torch phù hợp driver trước.
+pip install -r requirements-vm.txt
+python -m pytest -q -p no:anyio
+python scripts/prepare_data.py --kaggle
+
+# Zero-shot
+python run_lab.py --experiment e0 --data data --output work/e0.jsonl
+python scripts/score.py --pred work/e0.jsonl --name E0 --out report/evidence/e0.json
+
+# Fine-tune E1, E2, E3 (mỗi lệnh sinh prediction và work/run*/run.json)
+python run_lab.py --experiment e1 --data data --output work/e1.jsonl --run-dir work/e1
+python run_lab.py --experiment e2 --data data --output work/e2.jsonl --run-dir work/e2
+python run_lab.py --experiment e3 --data data --output work/e3.jsonl --run-dir work/e3
+python run_lab.py --experiment e4 --rank 4 --data data --output work/e4_rank_4.jsonl --run-dir work/e4_rank_4
+python run_lab.py --experiment e4 --rank 64 --data data --output work/e4_rank_64.jsonl --run-dir work/e4_rank_64
+for e in e1 e2 e3; do python scripts/score.py --pred work/$e.jsonl --name ${e^^} \
+  --out report/evidence/$e.json $(python -c "import json;d=json.load(open('work/$e/run.json'));print('--meta trainable_params='+str(d['trainable_params']),'--meta peak_vram_gb='+str(d['peak_vram_gb']),'--meta train_minutes='+str(d['train_minutes']))"); done
+```
+
+`run_lab.py` tải model một lần cho mỗi thí nghiệm, giữ ViT/projector theo đúng setup, mask loss trên phần assistant JSON, và lưu projector E2/E3 riêng. Có thể dùng `--limit 40 --max-steps 5` để smoke-test trên VM trước khi chạy đầy đủ. Không commit `data/`, `work/` hoặc trọng số.

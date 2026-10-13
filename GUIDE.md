@@ -225,3 +225,26 @@ GRPO: khởi tạo từ adapter tốt nhất, `num_generations=4`, `max_completi
 | `parse_valid_rate` thấp | model lặp vô hạn / bị cắt | tăng `max_new_tokens`, kiểm tra token kết thúc `<|im_end|>` trong nhãn |
 | F1 ≈ 0 mà JSON hợp lệ | sai thang toạ độ (pixel thay vì 0–1000) | xem lại bước 2 và `--coord` |
 | Mất session giữa chừng | Colab free ngắt | chép adapter lên Drive sau mỗi lần |
+
+## Chạy nhanh trên VM
+
+Thay notebook bằng runner có sẵn trong repo:
+
+```bash
+source .venv/bin/activate
+python scripts/prepare_data.py --kaggle
+python run_lab.py --experiment e0 --data data --output work/e0.jsonl
+python scripts/score.py --pred work/e0.jsonl --name E0 --out report/evidence/e0.json
+python run_lab.py --experiment e1 --data data --output work/e1.jsonl --run-dir work/e1
+```
+
+Lặp lệnh cuối với `e2` và `e3`. Trước khi chạy 300 bước, kiểm tra model và VRAM bằng `--limit 2 --max-steps 1`; khi đã đúng thì bỏ hai cờ này. `run.json` chứa số tham số train, VRAM đỉnh và thời gian để truyền vào `score.py --meta`.
+
+E4 mặc định trong runner là ablation rank trên setup E3. Chạy hai giá trị và chấm thành hai file riêng:
+
+```bash
+python run_lab.py --experiment e4 --rank 4  --data data --output work/e4_rank_4.jsonl  --run-dir work/e4_rank_4
+python run_lab.py --experiment e4 --rank 64 --data data --output work/e4_rank_64.jsonl --run-dir work/e4_rank_64
+python scripts/score.py --pred work/e4_rank_4.jsonl --name E4-r4 --out report/evidence/e4_rank_4.json
+python scripts/score.py --pred work/e4_rank_64.jsonl --name E4-r64 --out report/evidence/e4_rank_64.json
+```

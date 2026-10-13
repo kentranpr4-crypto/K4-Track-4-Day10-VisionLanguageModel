@@ -215,7 +215,10 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
     model.config.use_cache = False
     opt = torch.optim.AdamW(trainable, lr=lr, weight_decay=0)
     device = next(model.parameters()).device
-    scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda")
+    # PyTorch 2.14 rejects unscale_() for FP16 LoRA gradients. Use the scaler
+    # only when every trainable parameter can safely hold FP32 gradients.
+    use_scaler = device.type == "cuda" and all(p.dtype != torch.float16 for p in trainable)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     peak = 0
@@ -236,12 +239,19 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
                 loss = model(**batch).loss / grad_accum
             if not math.isfinite(float(loss.detach())):
                 raise FloatingPointError(f"non-finite loss at step {step}")
-            scaler.scale(loss).backward()
+            if scaler.is_enabled():
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
             loss_value += float(loss.detach())
-        scaler.unscale_(opt)
+        if scaler.is_enabled():
+            scaler.unscale_(opt)
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
-        scaler.step(opt)
-        scaler.update()
+        if scaler.is_enabled():
+            scaler.step(opt)
+            scaler.update()
+        else:
+            opt.step()
         if device.type == "cuda":
             peak = max(peak, torch.cuda.max_memory_allocated() / 1e9)
         if (step + 1) % 25 == 0:

@@ -215,10 +215,10 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
     model.config.use_cache = False
     opt = torch.optim.AdamW(trainable, lr=lr, weight_decay=0)
     device = next(model.parameters()).device
-    # PyTorch 2.14 rejects unscale_() for FP16 LoRA gradients. Use the scaler
-    # only when every trainable parameter can safely hold FP32 gradients.
-    use_scaler = device.type == "cuda" and all(p.dtype != torch.float16 for p in trainable)
-    scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
+    # PyTorch 2.14 rejects unscale_() when an optimizer mixes FP16 LoRA and
+    # FP32 projector gradients. Autocast remains enabled; skip GradScaler so
+    # both E1 and projector-training E2/E3 use the same stable update path.
+    scaler = torch.amp.GradScaler("cuda", enabled=False)
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     peak = 0

@@ -191,6 +191,11 @@ def apply_setup(model, setup: str, rank=16, alpha=32, dropout=0.05):
     peft = get_peft_model(model, LoraConfig(r=rank, lora_alpha=alpha,
                     lora_dropout=dropout, target_modules=targets,
                     task_type="CAUSAL_LM", bias="none"))
+    # Keep trainable LoRA weights in FP32 so GradScaler can safely handle the
+    # optimizer together with the FP32 projector parameters.
+    for name, p in peft.named_parameters():
+        if p.requires_grad and "lora_" in name:
+            p.data = p.data.float()
     if setup in ("e2", "e3"):
         for name, p in peft.named_parameters():
             if "visual.merger" in name or "visual.deepstack_merger_list" in name:
@@ -215,10 +220,8 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
     model.config.use_cache = False
     opt = torch.optim.AdamW(trainable, lr=lr, weight_decay=0)
     device = next(model.parameters()).device
-    # PyTorch 2.14 rejects unscale_() when an optimizer mixes FP16 LoRA and
-    # FP32 projector gradients. Autocast remains enabled; skip GradScaler so
-    # both E1 and projector-training E2/E3 use the same stable update path.
-    scaler = torch.amp.GradScaler("cuda", enabled=False)
+    use_scaler = device.type == "cuda" and all(p.dtype == torch.float32 for p in trainable)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     peak = 0
@@ -239,7 +242,7 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
             # much wider exponent range.
             amp_dtype = torch.float16
             with torch.autocast(device_type=device.type, dtype=amp_dtype,
-                                enabled=device.type == "cuda" and setup not in ("e2", "e3")):
+                                enabled=device.type == "cuda"):
                 loss = model(**batch).loss / grad_accum
             if not math.isfinite(float(loss.detach())):
                 raise FloatingPointError(f"non-finite loss at step {step}")

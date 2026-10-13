@@ -160,7 +160,14 @@ def collate(batch, processor):
         vals = [x[key] for x in batch if key in x]
         if not vals:
             continue
-        pad = -100 if key == "labels" else (tokenizer.pad_token_id or 0)
+        if key == "labels":
+            pad = -100
+        elif key == "mm_token_type_ids":
+            # 0 is the text modality. Padding with pad_token_id (151643)
+            # makes Qwen3-VL look up a nonexistent modality grid key.
+            pad = 0
+        else:
+            pad = tokenizer.pad_token_id or 0
         result[key] = _pad(vals, pad, getattr(tokenizer, "padding_side", "right"))
     for key in ("pixel_values", "image_grid_thw"):
         vals = [x[key] for x in batch if key in x]

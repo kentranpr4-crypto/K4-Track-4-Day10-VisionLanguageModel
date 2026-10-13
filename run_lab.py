@@ -234,7 +234,11 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
                 image = Image.open(data_root / row["image_path"]).convert("RGB")
                 encoded.append(encode_example(processor, image, objects_to_answer(row["objects"])))
             batch = {k: v.to(device) if hasattr(v, "to") else v for k, v in collate(encoded, processor).items()}
-            with torch.autocast(device_type=device.type, dtype=torch.float16,
+            # Projector training can overflow FP16 on Qwen3-VL. Ada GPUs have
+            # native BF16, which keeps the same mixed-precision speed with a
+            # much wider exponent range.
+            amp_dtype = torch.bfloat16 if setup in ("e2", "e3") else torch.float16
+            with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                 enabled=device.type == "cuda"):
                 loss = model(**batch).loss / grad_accum
             if not math.isfinite(float(loss.detach())):

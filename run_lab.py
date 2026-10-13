@@ -220,8 +220,10 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
     model.config.use_cache = False
     opt = torch.optim.AdamW(trainable, lr=lr, weight_decay=0)
     device = next(model.parameters()).device
-    use_scaler = device.type == "cuda" and all(p.dtype == torch.float32 for p in trainable)
-    scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
+    # Autocast may still produce FP16 gradients for wrapped LoRA modules even
+    # when their storage dtype is FP32, so GradScaler.unscale_ is unsupported
+    # by this PyTorch build. Keep autocast but use direct backward/step.
+    scaler = torch.amp.GradScaler("cuda", enabled=False)
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     peak = 0

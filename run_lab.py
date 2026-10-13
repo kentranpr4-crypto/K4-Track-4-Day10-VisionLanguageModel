@@ -224,7 +224,7 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
         opt.zero_grad(set_to_none=True)
         loss_value = 0.0
         for _ in range(grad_accum):
-            batch_rows = [rows[(step * grad_accum + _) * batch_size + i % len(rows)]
+            batch_rows = [rows[((step * grad_accum + _) * batch_size + i) % len(rows)]
                           for i in range(batch_size)]
             encoded = []
             for row in batch_rows:

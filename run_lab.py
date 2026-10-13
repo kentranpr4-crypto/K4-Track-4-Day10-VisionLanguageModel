@@ -175,11 +175,12 @@ def apply_setup(model, setup: str, rank=16, alpha=32, dropout=0.05):
         p.requires_grad = False
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
-    targets = (r"(?:language_model\.layers\.\d+\.(?:self_attn|mlp)\."
-               r"(?:q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj))")
+    # PEFT 0.21 treats a list as module-name suffixes. This is more portable
+    # across Qwen3-VL wrappers than relying on a full-name regular expression.
+    targets = ["q_proj", "k_proj", "v_proj", "o_proj",
+               "gate_proj", "up_proj", "down_proj"]
     if setup == "e3":
-        targets = (targets + r"|(?:visual\.blocks\.\d+\.(?:attn|mlp)\."
-                    r"(?:qkv|proj|linear_fc1|linear_fc2))")
+        targets += ["qkv", "linear_fc1", "linear_fc2"]
     peft = get_peft_model(model, LoraConfig(r=rank, lora_alpha=alpha,
                     lora_dropout=dropout, target_modules=targets,
                     task_type="CAUSAL_LM", bias="none"))

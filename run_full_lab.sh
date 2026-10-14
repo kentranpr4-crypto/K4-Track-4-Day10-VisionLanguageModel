@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$(dirname "$(realpath "$0")")")"
+cd "$(dirname "$(realpath "$0")")"
 mkdir -p work report/evidence
 
 echo '=== E0: zero-shot ==='

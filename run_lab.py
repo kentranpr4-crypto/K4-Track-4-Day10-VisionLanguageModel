@@ -77,15 +77,16 @@ def _model_classes():
     return AutoProcessor, BitsAndBytesConfig, Qwen3VLForConditionalGeneration
 
 
-def load_model(model_id: str, training: bool = False):
+def load_model(model_id: str, training: bool = False, setup: str = "e0"):
     _require_torch()
     AutoProcessor, BitsAndBytesConfig, Model = _model_classes()
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+    use_bf16 = training and setup in ("e2", "e3", "e4") and torch.cuda.is_bf16_supported()
+    dtype = (torch.bfloat16 if use_bf16 else torch.float16) if torch.cuda.is_available() else torch.float32
     kwargs: dict[str, Any] = {"torch_dtype": dtype}
     if torch.cuda.is_available():
         q = BitsAndBytesConfig(
             load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=dtype, bnb_4bit_use_double_quant=True,
             llm_int8_skip_modules=["visual", "lm_head"],
         )
         kwargs["quantization_config"] = q
@@ -162,7 +163,7 @@ def collate(batch, processor):
             continue
         if key == "labels":
             pad = -100
-        elif key == "mm_token_type_ids":
+        elif key in ("attention_mask", "mm_token_type_ids"):
             # 0 is the text modality. Padding with pad_token_id (151643)
             # makes Qwen3-VL look up a nonexistent modality grid key.
             pad = 0
@@ -191,8 +192,7 @@ def apply_setup(model, setup: str, rank=16, alpha=32, dropout=0.05):
     peft = get_peft_model(model, LoraConfig(r=rank, lora_alpha=alpha,
                     lora_dropout=dropout, target_modules=targets,
                     task_type="CAUSAL_LM", bias="none"))
-    # Keep trainable LoRA weights in FP32 so GradScaler can safely handle the
-    # optimizer together with the FP32 projector parameters.
+    # Keep trainable LoRA weights in FP32 for stable optimizer updates.
     for name, p in peft.named_parameters():
         if p.requires_grad and "lora_" in name:
             p.data = p.data.float()
@@ -225,10 +225,6 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
     model.config.use_cache = False
     opt = torch.optim.AdamW(trainable, lr=lr, weight_decay=0)
     device = next(model.parameters()).device
-    # Autocast may still produce FP16 gradients for wrapped LoRA modules even
-    # when their storage dtype is FP32, so GradScaler.unscale_ is unsupported
-    # by this PyTorch build. Keep autocast but use direct backward/step.
-    scaler = torch.amp.GradScaler("cuda", enabled=False)
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     peak = 0
@@ -244,28 +240,21 @@ def train(model, processor, rows, data_root: Path, setup: str, output_dir: Path,
                 image = Image.open(data_root / row["image_path"]).convert("RGB")
                 encoded.append(encode_example(processor, image, objects_to_answer(row["objects"])))
             batch = {k: v.to(device) if hasattr(v, "to") else v for k, v in collate(encoded, processor).items()}
-            # Projector training can overflow FP16 on Qwen3-VL. Ada GPUs have
-            # native BF16, which keeps the same mixed-precision speed with a
-            # much wider exponent range.
-            amp_dtype = torch.float16
+            amp_dtype = torch.bfloat16 if setup in ("e2", "e3") else torch.float16
             with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                 enabled=device.type == "cuda"):
                 loss = model(**batch).loss / grad_accum
             if not math.isfinite(float(loss.detach())):
-                raise FloatingPointError(f"non-finite loss at step {step}")
-            if scaler.is_enabled():
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
+                bad = [n for n, p in model.named_parameters() if p.requires_grad and not torch.isfinite(p).all()]
+                raise FloatingPointError(f"non-finite loss at step {step}; bad parameters: {bad[:8]}")
+            loss.backward()
             loss_value += float(loss.detach())
-        if scaler.is_enabled():
-            scaler.unscale_(opt)
-        torch.nn.utils.clip_grad_norm_(trainable, 1.0)
-        if scaler.is_enabled():
-            scaler.step(opt)
-            scaler.update()
-        else:
-            opt.step()
+        bad_grads = [n for n, p in model.named_parameters()
+                     if p.requires_grad and p.grad is not None and not torch.isfinite(p.grad).all()]
+        if bad_grads:
+            raise FloatingPointError(f"non-finite gradients at step {step}: {bad_grads[:8]}")
+        torch.nn.utils.clip_grad_norm_(trainable, 1.0, error_if_nonfinite=True)
+        opt.step()
         if device.type == "cuda":
             peak = max(peak, torch.cuda.max_memory_allocated() / 1e9)
         if (step + 1) % 25 == 0:
@@ -295,7 +284,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     data = Path(args.data)
     split = read_jsonl(data / "splits" / "test.jsonl")
-    model, processor = load_model(args.model_id, training=args.experiment != "e0")
+    model, processor = load_model(args.model_id, training=args.experiment != "e0",
+                                  setup=args.experiment)
     if args.experiment == "e0":
         rows = generate_predictions(model, processor, split, data, limit=args.limit)
         write_jsonl(args.output, rows)

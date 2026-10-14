@@ -12,11 +12,14 @@ Môi trường: Vast.ai, NVIDIA RTX 6000 Ada 48 GB, PyTorch 2.6.0+cu124. Các s�
 | E1 | LoRA LLM | 33,030,144 | 6.218 | 33.14 | 0.273 | 0.233–0.314 | 0.643 | 0.174 | 0.199 | 0.462 |
 | E2 | + projector | 87,609,344 | 6.442 | 35.53 | 0.000 | 0.000–0.000 | 1.000 | 0.000 | 0.000 | 0.000 |
 | E3 | + LoRA ViT | 94,892,032 | 6.764 | 37.51 | 0.000 | 0.000–0.000 | 1.000 | 0.000 | 0.000 | 0.000 |
-| E4 | rank 4 và 64 trên E1 | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy |
+| E4 r=4 | LoRA LLM trên E1 | 8,257,536 | 6.844 | 36.85 | 0.286 | 0.244–0.328 | 0.653 | 0.168 | 0.227 | 0.469 |
+| E4 r=64 | LoRA LLM trên E1 | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy |
 
 ## 10 câu hỏi (trả lời bằng **số của bạn**, không chép lại tài liệu)
 
-### Câu 1 — Kiến trúc: ViT, projector và LLM của Qwen3-VL-4B có bao nhiêu tham số mỗi khối, và E1/E2/E3 mỗi cái cập nhật khối nào?
+### Câu 1 — Kiến trúc: ViT, projector và LLM của QTraining. The two heavy encoders run offline: V-JEPA 2.1 caches the visual latents and Cosmos-Reason1 caches the conditioning targets from the refined captions. Training then only moves the predictor, supervised by a permutation-invariant set-match loss.
+
+wen3-VL-4B có bao nhiêu tham số mỗi khối, và E1/E2/E3 mỗi cái cập nhật khối nào?
 Theo tài liệu model trong đề, tổng khoảng 4,44 tỉ tham số gồm LLM khoảng 4,0 tỉ và ViT khoảng 415 triệu; merger khoảng 27 triệu và ba deepstack merger khoảng 82 triệu. Đây là quy mô tham khảo, không phải số đo trực tiếp từ checkpoint VM. E1 cập nhật LoRA của attention và MLP trong LLM: runner ghi 33,030,144 tham số trainable. E2 mở thêm các tham số `visual.merger` và `visual.deepstack_merger_list`, runner ghi 87,609,344 tham số trainable, tăng 54,579,200 so với E1. E3 thêm LoRA ViT, đạt 94,892,032 tham số trainable, tăng 7,282,688 so với E2. Chênh lệch E2 thực đo không bằng 109 triệu mà hướng dẫn ước tính; đây là điểm cần kiểm tra lại mapping module và điều kiện `requires_grad` trước khi kết luận về toàn bộ projector.
 
 ### Câu 2 — E0: `parse_valid_rate` bằng bao nhiêu, và hai lỗi phổ biến nhất của model gốc là gì (kèm một ví dụ output thô)?
@@ -50,7 +53,7 @@ Bootstrap 95% trên 311 ảnh cho E0 là 0.054–0.109 (rộng 0.055) và E1 là
 | manhole | ![Manhole hit](report/figures/manhole_hit.jpg) | ![Manhole miss](report/figures/manhole_miss.jpg) |
 
 ### Câu 10 — E4: bạn đổi biến nào, kết quả thế nào, và kết luận có đáng tin không?
-E4 thay đúng một biến là rank LoRA trên E1, giữ nguyên dữ liệu, prompt và các siêu tham số khác. Hai giá trị cần chạy là `r=4` và `r=64`, với alpha bằng `2*r`. Kết quả và CI95 sẽ được bổ sung từ hai file `e4_rank_4.json` và `e4_rank_64.json` sau khi job hoàn tất; hiện chưa có cơ sở để kết luận rank nào tốt hơn.
+E4 thay đúng một biến là rank LoRA trên E1, giữ nguyên dữ liệu, prompt và các siêu tham số khác. Hai giá trị là `r=4` và `r=64`, với alpha bằng `2*r`. Rank 4 đạt F1 0.286 (CI95 0.244–0.328), cao hơn E1 rank 16 0.273 khoảng 0.013 nhưng CI95 chồng lấp nhiều, nên chưa thể kết luận cải thiện. Rank 64 đang chạy; so sánh cuối sẽ bổ sung sau khi có `e4_rank_64.json`.
 
 ## Nhìn lại
 

@@ -240,7 +240,7 @@ python run_lab.py --experiment e1 --data data --output work/e1.jsonl --run-dir w
 
 Lặp lệnh cuối với `e2` và `e3`. Trước khi chạy 300 bước, kiểm tra model và VRAM bằng `--limit 2 --max-steps 1`; khi đã đúng thì bỏ hai cờ này. `run.json` chứa số tham số train, VRAM đỉnh và thời gian để truyền vào `score.py --meta`.
 
-E4 mặc định trong runner là ablation rank trên setup E3. Chạy hai giá trị và chấm thành hai file riêng:
+E4 mặc định trong runner là ablation rank trên setup E1 (setup tốt nhất của lần chạy này). Chạy hai giá trị và chấm thành hai file riêng:
 
 ```bash
 python run_lab.py --experiment e4 --rank 4  --data data --output work/e4_rank_4.jsonl  --run-dir work/e4_rank_4

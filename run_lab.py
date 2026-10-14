@@ -292,7 +292,9 @@ def main(argv=None):
         rows = generate_predictions(model, processor, split, data, limit=args.limit)
         write_jsonl(args.output, rows)
         return
-    setup = "e3" if args.experiment == "e4" else args.experiment
+    # E4 compares LoRA ranks against E1, the strongest completed setup in
+    # this run. E2 collapsed to one fixed manhole box on the test split.
+    setup = "e1" if args.experiment == "e4" else args.experiment
     model = apply_setup(model, setup, rank=args.rank, alpha=2 * args.rank)
     train_rows = read_jsonl(data / "splits" / "train.jsonl")
     stats = train(model, processor, train_rows, data, setup, Path(args.run_dir),

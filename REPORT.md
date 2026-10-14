@@ -2,7 +2,7 @@ Họ tên: Trần Cao Quốc Định
 MSSV: 2A202602939  
 `dataset_version`: `d10-21e4070301`
 
-Môi trường: Vast.ai, NVIDIA RTX 6000 Ada 48 GB, PyTorch 2.6.0+cu124. Các số dưới đây lấy từ `report/evidence/*.json` trên split test 311 ảnh; các thí nghiệm còn chạy được ghi rõ trạng thái, không thay bằng số ước lượng.
+Môi trường: Vast.ai, NVIDIA RTX 6000 Ada 48 GB, PyTorch 2.6.0+cu124. Các số dưới đây lấy từ `report/evidence/*.json` trên split test 311 ảnh. E0 không có log VRAM và thời gian nên hai ô đó ghi "chưa đo".
 
 ## Bảng tổng hợp (số của bạn, lấy từ `report/evidence/*.json`)
 
@@ -13,7 +13,7 @@ Môi trường: Vast.ai, NVIDIA RTX 6000 Ada 48 GB, PyTorch 2.6.0+cu124. Các s�
 | E2 | + projector | 87,609,344 | 6.442 | 35.53 | 0.000 | 0.000–0.000 | 1.000 | 0.000 | 0.000 | 0.000 |
 | E3 | + LoRA ViT | 94,892,032 | 6.764 | 37.51 | 0.000 | 0.000–0.000 | 1.000 | 0.000 | 0.000 | 0.000 |
 | E4 r=4 | LoRA LLM trên E1 | 8,257,536 | 6.844 | 36.85 | 0.286 | 0.244–0.328 | 0.653 | 0.168 | 0.227 | 0.469 |
-| E4 r=64 | LoRA LLM trên E1 | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy | đang chạy |
+| E4 r=64 | LoRA LLM trên E1 | 132,120,576 | 8.860 | 35.54 | 0.194 | 0.159–0.231 | 0.791 | 0.125 | 0.108 | 0.334 |
 
 ## 10 câu hỏi (trả lời bằng **số của bạn**, không chép lại tài liệu)
 
@@ -53,7 +53,7 @@ Bootstrap 95% trên 311 ảnh cho E0 là 0.054–0.109 (rộng 0.055) và E1 là
 | manhole | ![Manhole hit](report/figures/manhole_hit.jpg) | ![Manhole miss](report/figures/manhole_miss.jpg) |
 
 ### Câu 10 — E4: bạn đổi biến nào, kết quả thế nào, và kết luận có đáng tin không?
-E4 thay đúng một biến là rank LoRA trên E1, giữ nguyên dữ liệu, prompt và các siêu tham số khác. Hai giá trị là `r=4` và `r=64`, với alpha bằng `2*r`. Rank 4 đạt F1 0.286 (CI95 0.244–0.328), cao hơn E1 rank 16 0.273 khoảng 0.013 nhưng CI95 chồng lấp nhiều, nên chưa thể kết luận cải thiện. Rank 64 đang chạy; so sánh cuối sẽ bổ sung sau khi có `e4_rank_64.json`.
+E4 thay đúng một biến là rank LoRA trên E1, giữ nguyên dữ liệu, prompt và các siêu tham số khác. Hai giá trị là `r=4` và `r=64`, với alpha bằng `2*r`. Rank 4 đạt F1 0.286 (CI95 0.244–0.328), cao hơn E1 rank 16 0.273 khoảng 0.013 nhưng CI95 chồng lấp nhiều, nên chưa thể kết luận cải thiện. Rank 64 đạt F1 0.194 (CI95 0.159–0.231), thấp hơn rank 4 khoảng 0.092; hai CI95 không giao nhau. Rank 64 cũng dùng 132.1 triệu tham số trainable và 8.860 GB VRAM, so với 8.26 triệu và 6.844 GB của rank 4. Trên split này rank 4 là lựa chọn tốt hơn, dù để định lượng chắc chênh lệch cần bootstrap ghép cặp và lặp lại với seed khác.
 
 ## Nhìn lại
 

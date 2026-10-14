@@ -107,7 +107,7 @@ def _messages(image: Image.Image, answer: str | None = None):
 
 
 def generate_predictions(model, processor, rows, data_root: Path, max_new_tokens=256,
-                         limit: int | None = None):
+                         limit: int | None = None, amp_dtype=None):
     device = next(model.parameters()).device
     out = []
     model.eval()
@@ -119,7 +119,9 @@ def generate_predictions(model, processor, rows, data_root: Path, max_new_tokens
                 return_dict=True, return_tensors="pt",
             )
             enc = {k: v.to(device) if hasattr(v, "to") else v for k, v in enc.items()}
-            generated = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False)
+            with torch.autocast(device_type=device.type, dtype=amp_dtype or torch.float16,
+                                enabled=device.type == "cuda" and amp_dtype is not None):
+                generated = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False)
             prompt_len = enc["input_ids"].shape[1]
             raw = processor.batch_decode(generated[:, prompt_len:], skip_special_tokens=True)[0]
             out.append({"image_id": row["image_id"], "raw": raw.strip()})
@@ -296,7 +298,8 @@ def main(argv=None):
     stats = train(model, processor, train_rows, data, setup, Path(args.run_dir),
                   max_steps=args.max_steps or 300, batch_size=args.batch_size,
                   grad_accum=args.grad_accum)
-    rows = generate_predictions(model, processor, split, data, limit=args.limit)
+    rows = generate_predictions(model, processor, split, data, limit=args.limit,
+                                amp_dtype=torch.bfloat16 if setup in ("e2", "e3") else None)
     write_jsonl(args.output, rows)
     print(json.dumps(stats, indent=2))
 
